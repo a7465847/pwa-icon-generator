@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA 圖示產生器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .canvas-preview {
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                              linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2 text-center">
+            <i class="fas fa-icons text-blue-600 mr-2"></i>PWA 圖示產生器
+        </h1>
+        <p class="text-gray-500 text-center mb-6 text-sm">上傳圖片或輸入文字，快速生成 PNG 與 SVG</p>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <!-- Left: Controls -->
+            <div class="space-y-6">
+                
+                <!-- Input Type Toggle -->
+                <div class="flex border rounded-lg overflow-hidden">
+                    <button onclick="setMode('image')" id="btn-mode-image" class="flex-1 py-2 text-sm font-medium bg-blue-600 text-white transition">
+                        上傳圖片
+                    </button>
+                    <button onclick="setMode('emoji')" id="btn-mode-emoji" class="flex-1 py-2 text-sm font-medium bg-gray-100 text-gray-600 transition">
+                        使用 Emoji/文字
+                    </button>
+                </div>
+
+                <!-- Image Upload Control -->
+                <div id="control-image" class="block">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">選擇圖片文件</label>
+                    <div class="flex items-center justify-center w-full">
+                        <label for="file-upload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                <i class="fas fa-cloud-upload-alt text-2xl text-gray-400 mb-2"></i>
+                                <p class="text-xs text-gray-500">SVG, PNG, JPG (最大 5MB)</p>
+                            </div>
+                            <input id="file-upload" type="file" class="hidden" accept="image/*" onchange="handleImageUpload(event)" />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Emoji Control -->
+                <div id="control-emoji" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">輸入 Emoji 或文字</label>
+                    <input type="text" id="emoji-input" value="🚀" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center text-3xl" oninput="drawCanvas()">
+                    <p class="text-xs text-gray-400 mt-1">Windows: Win + . | Mac: Ctrl + Cmd + Space</p>
+                </div>
+
+                <!-- Background Color -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">背景顏色</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="bg-color" value="#ffffff" class="h-10 w-10 p-0 border-0 rounded cursor-pointer" oninput="drawCanvas()">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="transparent-bg" class="w-4 h-4 text-blue-600 rounded" onchange="toggleTransparent(this)">
+                            <label for="transparent-bg" class="ml-2 text-sm text-gray-600">透明背景</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Padding Control -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">內距 (Padding): <span id="padding-val">0</span>%</label>
+                    <input type="range" id="padding-range" min="0" max="50" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" oninput="updatePadding(this.value)">
+                </div>
+
+            </div>
+
+            <!-- Right: Preview & Download -->
+            <div class="flex flex-col items-center justify-center space-y-6">
+                
+                <div class="relative">
+                    <div class="canvas-preview rounded-2xl shadow-sm border border-gray-200 p-1">
+                        <canvas id="previewCanvas" width="512" height="512" class="w-48 h-48 md:w-64 md:h-64 rounded-xl bg-white"></canvas>
+                    </div>
+                    <div class="absolute -bottom-6 left-0 right-0 text-center">
+                        <span class="text-xs text-gray-400">預覽 (512px)</span>
+                    </div>
+                </div>
+
+                <div class="w-full grid grid-cols-1 gap-3 mt-4">
+                    <button onclick="downloadIcon(192)" class="flex items-center justify-center w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
+                        <i class="fas fa-download mr-2"></i> 下載 PNG (192x192)
+                    </button>
+                    <button onclick="downloadIcon(512)" class="flex items-center justify-center w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
+                        <i class="fas fa-download mr-2"></i> 下載 PNG (512x512)
+                    </button>
+                    <button onclick="downloadSVG()" class="flex items-center justify-center w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-lg transition shadow-md border border-gray-600">
+                        <i class="fas fa-file-code mr-2"></i> 下載 SVG (向量/嵌入)
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="mt-8 pt-6 border-t text-xs text-gray-400 text-center">
+            提示：所有處理均在瀏覽器本地完成，您的圖片不會上傳到伺服器。
+        </div>
+
+    </div>
+
+    <!-- Hidden Canvas for processing -->
+    <canvas id="processCanvas" width="512" height="512" class="hidden"></canvas>
+
+    <script>
+        // State
+        let mode = 'image'; // 'image' or 'emoji'
+        let uploadedImage = null;
+        let paddingPercent = 0;
+        
+        // Initial setup
+        window.onload = function() {
+            // Create a default placeholder image/text
+            drawCanvas();
+        };
+
+        function setMode(newMode) {
+            mode = newMode;
+            
+            // UI Toggles
+            const btnImg = document.getElementById('btn-mode-image');
+            const btnEmoji = document.getElementById('btn-mode-emoji');
+            const ctrlImg = document.getElementById('control-image');
+            const ctrlEmoji = document.getElementById('control-emoji');
+
+            if (mode === 'image') {
+                btnImg.classList.remove('bg-gray-100', 'text-gray-600');
+                btnImg.classList.add('bg-blue-600', 'text-white');
+                btnEmoji.classList.remove('bg-blue-600', 'text-white');
+                btnEmoji.classList.add('bg-gray-100', 'text-gray-600');
+                ctrlImg.classList.remove('hidden');
+                ctrlImg.classList.add('block');
+                ctrlEmoji.classList.remove('block');
+                ctrlEmoji.classList.add('hidden');
+            } else {
+                btnEmoji.classList.remove('bg-gray-100', 'text-gray-600');
+                btnEmoji.classList.add('bg-blue-600', 'text-white');
+                btnImg.classList.remove('bg-blue-600', 'text-white');
+                btnImg.classList.add('bg-gray-100', 'text-gray-600');
+                ctrlEmoji.classList.remove('hidden');
+                ctrlEmoji.classList.add('block');
+                ctrlImg.classList.remove('block');
+                ctrlImg.classList.add('hidden');
+            }
+            drawCanvas();
+        }
+
+        function toggleTransparent(checkbox) {
+            const colorInput = document.getElementById('bg-color');
+            colorInput.disabled = checkbox.checked;
+            if (checkbox.checked) {
+                colorInput.parentElement.classList.add('opacity-50');
+            } else {
+                colorInput.parentElement.classList.remove('opacity-50');
+            }
+            drawCanvas();
+        }
+
+        function updatePadding(val) {
+            paddingPercent = parseInt(val);
+            document.getElementById('padding-val').innerText = paddingPercent;
+            drawCanvas();
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    uploadedImage = img;
+                    drawCanvas();
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function drawCanvas() {
+            const canvas = document.getElementById('previewCanvas');
+            const ctx = canvas.getContext('2d');
+            const size = 512;
+            
+            // Clear
+            ctx.clearRect(0, 0, size, size);
+
+            // Background
+            const isTransparent = document.getElementById('transparent-bg').checked;
+            const bgColor = document.getElementById('bg-color').value;
+
+            if (!isTransparent) {
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(0, 0, size, size);
+            }
+
+            // Draw Content
+            const padding = (paddingPercent / 100) * size;
+            const drawSize = size - (padding * 2);
+
+            if (mode === 'image' && uploadedImage) {
+                // Calculate aspect ratio fit
+                const aspect = uploadedImage.width / uploadedImage.height;
+                let dw, dh, dx, dy;
+
+                if (aspect > 1) {
+                    dw = drawSize;
+                    dh = drawSize / aspect;
+                } else {
+                    dh = drawSize;
+                    dw = drawSize * aspect;
+                }
+                dx = padding + (drawSize - dw) / 2;
+                dy = padding + (drawSize - dh) / 2;
+
+                ctx.drawImage(uploadedImage, dx, dy, dw, dh);
+
+            } else if (mode === 'image' && !uploadedImage) {
+                // Placeholder prompt
+                ctx.fillStyle = isTransparent ? '#ccc' : (isLight(bgColor) ? '#ccc' : '#666');
+                ctx.font = '20px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('請上傳圖片', size/2, size/2);
+                
+            } else if (mode === 'emoji') {
+                const text = document.getElementById('emoji-input').value || '';
+                ctx.font = `${drawSize * 0.8}px sans-serif`; // Scale emoji
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // Emojis don't respond to fillStyle usually, but text does
+                ctx.fillStyle = isTransparent ? '#000' : (isLight(bgColor) ? '#000' : '#fff');
+                // Adjust for baseline quirk
+                ctx.fillText(text, size/2, size/2 + (drawSize * 0.05));
+            }
+        }
+
+        function downloadIcon(targetSize) {
+            // We use a temporary canvas to resize cleanly
+            const sourceCanvas = document.getElementById('previewCanvas');
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = targetSize;
+            tempCanvas.height = targetSize;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // Draw Image with high quality
+            tCtx.imageSmoothingEnabled = true;
+            tCtx.imageSmoothingQuality = 'high';
+            tCtx.drawImage(sourceCanvas, 0, 0, targetSize, targetSize);
+
+            // Trigger Download
+            const link = document.createElement('a');
+            link.download = `icon-${targetSize}x${targetSize}.png`;
+            link.href = tempCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function downloadSVG() {
+            const size = 512;
+            const isTransparent = document.getElementById('transparent-bg').checked;
+            const bgColor = document.getElementById('bg-color').value;
+            const paddingPercentVal = parseInt(document.getElementById('padding-range').value);
+            
+            let content = '';
+            
+            // Background
+            if (!isTransparent) {
+                content += `<rect width="100%" height="100%" fill="${bgColor}"/>`;
+            }
+
+            const padding = (paddingPercentVal / 100) * size;
+            const drawSize = size - (padding * 2);
+
+            if (mode === 'emoji') {
+                const text = document.getElementById('emoji-input').value || '';
+                const fontSize = drawSize * 0.8;
+                // SVG text centering
+                const textColor = isTransparent ? '#000' : (isLight(bgColor) ? '#000' : '#fff');
+                content += `<text x="50%" y="50%" font-family="sans-serif" font-size="${fontSize}" text-anchor="middle" dominant-baseline="central" fill="${textColor}">${text}</text>`;
+                
+            } else if (mode === 'image' && uploadedImage) {
+                const aspect = uploadedImage.width / uploadedImage.height;
+                let dw, dh, dx, dy;
+
+                if (aspect > 1) {
+                    dw = drawSize;
+                    dh = drawSize / aspect;
+                } else {
+                    dh = drawSize;
+                    dw = drawSize * aspect;
+                }
+                dx = padding + (drawSize - dw) / 2;
+                dy = padding + (drawSize - dh) / 2;
+                
+                // Use the data URL from the uploaded image directly in SVG
+                content += `<image href="${uploadedImage.src}" x="${dx}" y="${dy}" width="${dw}" height="${dh}" />`;
+            }
+
+            const svgBody = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+    ${content}
+</svg>`;
+
+            const blob = new Blob([svgBody], {type: 'image/svg+xml'});
+            const link = document.createElement('a');
+            link.download = 'icon.svg';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        }
+
+        // Helper to determine text color contrast
+        function isLight(color) {
+            const hex = color.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return brightness > 155;
+        }
+
+        // Initial draw
+        drawCanvas();
+
+    </script>
+</body>
+</html>
